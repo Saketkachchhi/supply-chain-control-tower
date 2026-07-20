@@ -165,7 +165,13 @@ def write_schedule_to_duckdb(db_path: str, product_id: str, dates: list, daily_d
         con.execute("ALTER TABLE inventory_schedule ADD COLUMN IF NOT EXISTS stockout DOUBLE DEFAULT 0.0")
         con.execute("ALTER TABLE inventory_schedule ADD COLUMN IF NOT EXISTS sla_penalty_cost DOUBLE DEFAULT 0.0")
 
-        now = datetime.now(timezone.utc)
+        # DuckDB's driver silently converts a tz-aware datetime to local wall-clock
+        # time before storing it in a plain (non-TZ) TIMESTAMP column - verified this
+        # directly: a tz-aware UTC value written here came back four hours off (the
+        # local UTC offset) when read back. Stripping tzinfo *after* computing UTC
+        # keeps the actual wall-clock numbers as UTC, which is what dashboard.py's
+        # freshness check assumes when it reads this column back.
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         rows = [
             (product_id, date, demand, production, inventory, stockout, stockout * SLA_PENALTY_COST, now)
             for date, demand, production, inventory, stockout in zip(
