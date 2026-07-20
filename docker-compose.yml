@@ -1,0 +1,30 @@
+services:
+  redpanda:
+    # Multi-arch image; on Apple Silicon / ARM64 hosts Docker pulls the native
+    # arm64 build automatically, so Redpanda runs without QEMU emulation.
+    # Pin to a specific tag (e.g. v24.2.18) instead of `latest` once you want
+    # reproducible builds.
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: redpanda
+    platform: linux/arm64
+    command:
+      - redpanda
+      - start
+      - --mode dev-container   # tunes CPU/memory reservations for a single container on a dev laptop
+      - --smp 1                # cap Redpanda to 1 core; plenty for local dev, keeps the fan quiet
+      - --kafka-addr 0.0.0.0:9092
+      - --advertise-kafka-addr localhost:9092   # critical: lets host clients (e.g. pos_simulator.py) resolve the broker
+    ports:
+      - "9092:9092"   # Kafka API - what pos_simulator.py connects to
+      - "9644:9644"   # Admin API - powers healthcheck, `rpk cluster health`, http://localhost:9644/v1/status/ready
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  redpanda_data:
